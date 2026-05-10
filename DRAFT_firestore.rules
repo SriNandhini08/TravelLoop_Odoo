@@ -1,0 +1,104 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 1. Primitive Helpers
+    function isSignedIn() { return request.auth != null; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    
+    function getTrip(tripId) {
+      return get(/databases/$(database)/documents/trips/$(tripId)).data;
+    }
+    
+    function isTripOwner(tripId) {
+      return isOwner(getTrip(tripId).userId);
+    }
+
+    function isTripPublic(tripId) {
+      return getTrip(tripId).isPublic == true;
+    }
+
+    // 2. Validation Blueprints
+    function isValidTrip(data) {
+      return data.keys().hasAll(['userId', 'name', 'startDate', 'endDate', 'createdAt', 'updatedAt'])
+        && data.userId == request.auth.uid
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.startDate is string && data.endDate is string
+        && data.createdAt == request.time
+        && data.updatedAt == request.time;
+    }
+
+    function isValidStop(data, tripId) {
+      return data.keys().hasAll(['tripId', 'city', 'startDate', 'endDate'])
+        && data.tripId == tripId
+        && data.city is string && data.city.size() > 0 && data.city.size() <= 100;
+    }
+
+    function isValidActivity(data, tripId) {
+      return data.keys().hasAll(['tripId', 'stopId', 'title', 'cost', 'category'])
+        && data.tripId == tripId
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 100
+        && data.cost is number && data.cost >= 0;
+    }
+
+    function isValidNote(data, tripId) {
+      return data.keys().hasAll(['tripId', 'content'])
+        && data.tripId == tripId
+        && data.content is string && data.content.size() <= 5000;
+    }
+
+    function isValidChecklistItem(data, tripId) {
+      return data.keys().hasAll(['tripId', 'item', 'completed'])
+        && data.tripId == tripId
+        && data.item is string && data.item.size() > 0 && data.item.size() <= 500
+        && data.completed is bool;
+    }
+
+    // 3. Collection Rules
+    match /trips/{tripId} {
+      allow get: if isValidId(tripId) && (isOwner(existing().userId) || isTripPublic(tripId));
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isValidId(tripId) && isValidTrip(incoming());
+      allow update: if isValidId(tripId) && isOwner(existing().userId) 
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isValidId(tripId) && isOwner(existing().userId);
+
+      match /stops/{stopId} {
+        allow read: if isValidId(stopId) && (isTripOwner(tripId) || isTripPublic(tripId));
+        allow create: if isValidId(stopId) && isTripOwner(tripId) && isValidStop(incoming(), tripId);
+        allow update: if isValidId(stopId) && isTripOwner(tripId) && isValidStop(incoming(), tripId);
+        allow delete: if isValidId(stopId) && isTripOwner(tripId);
+      }
+
+      match /activities/{activityId} {
+        allow read: if isValidId(activityId) && (isTripOwner(tripId) || isTripPublic(tripId));
+        allow create: if isValidId(activityId) && isTripOwner(tripId) && isValidActivity(incoming(), tripId);
+        allow update: if isValidId(activityId) && isTripOwner(tripId) && isValidActivity(incoming(), tripId);
+        allow delete: if isValidId(activityId) && isTripOwner(tripId);
+      }
+
+      match /notes/{noteId} {
+        allow read: if isValidId(noteId) && isTripOwner(tripId);
+        allow create: if isValidId(noteId) && isTripOwner(tripId) && isValidNote(incoming(), tripId);
+        allow update: if isValidId(noteId) && isTripOwner(tripId) && isValidNote(incoming(), tripId);
+        allow delete: if isValidId(noteId) && isTripOwner(tripId);
+      }
+
+      match /checklist/{itemId} {
+        allow read: if isValidId(itemId) && isTripOwner(tripId);
+        allow create: if isValidId(itemId) && isTripOwner(tripId) && isValidChecklistItem(incoming(), tripId);
+        allow update: if isValidId(itemId) && isTripOwner(tripId) && isValidChecklistItem(incoming(), tripId);
+        allow delete: if isValidId(itemId) && isTripOwner(tripId);
+      }
+    }
+  }
+}

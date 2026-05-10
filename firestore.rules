@@ -1,0 +1,146 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 1. Primitive Helpers
+    function isSignedIn() { return request.auth != null; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    
+    function getTrip(tripId) {
+      return get(/databases/$(database)/documents/trips/$(tripId)).data;
+    }
+
+    function isMember(tripId) {
+      let trip = getTrip(tripId);
+      return isSignedIn() && (request.auth.uid == trip.userId || (trip.members != null && request.auth.uid in trip.members));
+    }
+    
+    function isTripOwner(tripId) {
+      return isOwner(getTrip(tripId).userId);
+    }
+
+    function isTripPublic(tripId) {
+      return getTrip(tripId).isPublic == true;
+    }
+
+    // 2. Validation Blueprints
+    function isValidUser(data) {
+      return data.keys().hasAll(['firstName', 'lastName', 'email'])
+        && data.email == request.auth.token.email;
+    }
+
+    function isValidTrip(data) {
+      return data.keys().hasAll(['userId', 'name', 'startDate', 'endDate', 'createdAt', 'updatedAt'])
+        && data.userId == request.auth.uid
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.startDate is string && data.endDate is string
+        && (data.members == null || data.members is list)
+        && data.createdAt == request.time
+        && data.updatedAt == request.time;
+    }
+
+    function isValidMessage(data, tripId) {
+      return data.keys().hasAll(['tripId', 'senderId', 'text', 'createdAt'])
+        && data.tripId == tripId
+        && data.senderId == request.auth.uid
+        && data.text is string && data.text.size() > 0 && data.text.size() <= 2000
+        && data.createdAt == request.time;
+    }
+
+    function isValidStop(data, tripId) {
+      return data.keys().hasAll(['tripId', 'city', 'startDate', 'endDate'])
+        && data.tripId == tripId
+        && data.city is string && data.city.size() > 0 && data.city.size() <= 100;
+    }
+
+    function isValidActivity(data, tripId) {
+      return data.keys().hasAll(['tripId', 'stopId', 'title', 'cost', 'category'])
+        && data.tripId == tripId
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 100
+        && data.cost is number && data.cost >= 0;
+    }
+
+    function isValidNote(data, tripId) {
+      return data.keys().hasAll(['tripId', 'content'])
+        && data.tripId == tripId
+        && data.content is string && data.content.size() <= 5000;
+    }
+
+    function isValidChecklistItem(data, tripId) {
+      return data.keys().hasAll(['tripId', 'item', 'completed'])
+        && data.tripId == tripId
+        && data.item is string && data.item.size() > 0 && data.item.size() <= 500
+        && data.completed is bool;
+    }
+
+    // 3. Collection Rules
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId) && isValidUser(incoming());
+    }
+
+    match /trips/{tripId} {
+      allow get: if isValidId(tripId) && (isMember(tripId) || isTripPublic(tripId));
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || (resource.data.members != null && request.auth.uid in resource.data.members));
+      allow create: if isValidId(tripId) && isValidTrip(incoming());
+      allow update: if isValidId(tripId) && isTripOwner(tripId) 
+        && incoming().userId == existing().userId
+        && (incoming().members == null || incoming().members is list)
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isValidId(tripId) && isTripOwner(tripId);
+
+      match /messages/{messageId} {
+        allow get: if isValidId(messageId) && isMember(tripId);
+        allow list: if isMember(tripId);
+        allow create: if isValidId(messageId) && isMember(tripId) && isValidMessage(incoming(), tripId);
+        allow delete: if isValidId(messageId) && isTripOwner(tripId);
+      }
+
+      match /contacts/{contactId} {
+        allow get: if isValidId(contactId) && (isMember(tripId) || isTripPublic(tripId));
+        allow list: if isMember(tripId) || isTripPublic(tripId);
+        allow write: if isValidId(contactId) && isMember(tripId);
+      }
+
+      match /stops/{stopId} {
+        allow get: if isValidId(stopId) && (isMember(tripId) || isTripPublic(tripId));
+        allow list: if isMember(tripId) || isTripPublic(tripId);
+        allow create: if isValidId(stopId) && isMember(tripId) && isValidStop(incoming(), tripId);
+        allow update: if isValidId(stopId) && isMember(tripId) && isValidStop(incoming(), tripId);
+        allow delete: if isValidId(stopId) && isMember(tripId);
+      }
+
+      match /activities/{activityId} {
+        allow get: if isValidId(activityId) && (isMember(tripId) || isTripPublic(tripId));
+        allow list: if isMember(tripId) || isTripPublic(tripId);
+        allow create: if isValidId(activityId) && isMember(tripId) && isValidActivity(incoming(), tripId);
+        allow update: if isValidId(activityId) && isMember(tripId) && isValidActivity(incoming(), tripId);
+        allow delete: if isValidId(activityId) && isMember(tripId);
+      }
+
+      match /notes/{noteId} {
+        allow get: if isValidId(noteId) && isMember(tripId);
+        allow list: if isMember(tripId);
+        allow create: if isValidId(noteId) && isMember(tripId) && isValidNote(incoming(), tripId);
+        allow update: if isValidId(noteId) && isMember(tripId) && isValidNote(incoming(), tripId);
+        allow delete: if isValidId(noteId) && isMember(tripId);
+      }
+
+      match /checklist/{itemId} {
+        allow get: if isValidId(itemId) && isMember(tripId);
+        allow list: if isMember(tripId);
+        allow create: if isValidId(itemId) && isMember(tripId) && isValidChecklistItem(incoming(), tripId);
+        allow update: if isValidId(itemId) && isMember(tripId) && isValidChecklistItem(incoming(), tripId);
+        allow delete: if isValidId(itemId) && isMember(tripId);
+      }
+    }
+  }
+}

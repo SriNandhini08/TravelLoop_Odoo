@@ -1,0 +1,145 @@
+{
+  "entities": {
+    "Trip": {
+      "title": "Trip",
+      "description": "Main trip container",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "description": { "type": "string" },
+        "shareId": { "type": "string" },
+        "isPublic": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "members": { "type": "array", "items": { "type": "string" } },
+        "bannerUrl": { "type": "string" }
+      },
+      "required": ["userId", "name", "startDate", "endDate"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User profile details",
+      "type": "object",
+      "properties": {
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "city": { "type": "string" },
+        "country": { "type": "string" },
+        "photoURL": { "type": "string" }
+      },
+      "required": ["firstName", "lastName", "email"]
+    },
+    "Contact": {
+      "title": "Contact",
+      "description": "A helpful contact for a trip",
+      "type": "object",
+      "properties": {
+        "tripId": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "required": ["tripId", "name", "phone"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A message in a trip chat room",
+      "type": "object",
+      "properties": {
+        "tripId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderPhoto": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tripId", "senderId", "text", "createdAt"]
+    },
+    "Stop": {
+      "title": "Stop",
+      "description": "A city stop within a trip",
+      "type": "object",
+      "properties": {
+        "tripId": { "type": "string" },
+        "city": { "type": "string" },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" }
+      },
+      "required": ["tripId", "city", "startDate", "endDate"]
+    },
+    "Activity": {
+      "title": "Activity",
+      "description": "An activity within a stop",
+      "type": "object",
+      "properties": {
+        "stopId": { "type": "string" },
+        "tripId": { "type": "string" },
+        "title": { "type": "string" },
+        "cost": { "type": "number" },
+        "category": { "type": "string" }
+      },
+      "required": ["stopId", "tripId", "title", "cost"]
+    },
+    "Note": {
+      "title": "Note",
+      "description": "A note for a trip",
+      "type": "object",
+      "properties": {
+        "tripId": { "type": "string" },
+        "content": { "type": "string" }
+      },
+      "required": ["tripId", "content"]
+    },
+    "ChecklistItem": {
+      "title": "ChecklistItem",
+      "description": "A checklist item for a trip",
+      "type": "object",
+      "properties": {
+        "tripId": { "type": "string" },
+        "item": { "type": "string" },
+        "completed": { "type": "boolean" }
+      },
+      "required": ["tripId", "item", "completed"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/trips/{tripId}": {
+      "schema": "Trip",
+      "description": "Trips collection"
+    },
+    "/trips/{tripId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Chat messages for a trip"
+    },
+    "/trips/{tripId}/contacts/{contactId}": {
+      "schema": "Contact",
+      "description": "Contacts for a trip"
+    },
+    "/trips/{tripId}/stops/{stopId}": {
+      "schema": "Stop",
+      "description": "Stops for a trip"
+    },
+    "/trips/{tripId}/activities/{activityId}": {
+      "schema": "Activity",
+      "description": "Activities for a trip (linked to stop via stopId)"
+    },
+    "/trips/{tripId}/notes/{noteId}": {
+      "schema": "Note",
+      "description": "Notes for a trip"
+    },
+    "/trips/{tripId}/checklist/{itemId}": {
+      "schema": "ChecklistItem",
+      "description": "Checklist for a trip"
+    }
+  }
+}
